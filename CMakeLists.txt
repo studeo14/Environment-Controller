@@ -4,3 +4,5 @@ cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(blink)
+
+target_add_binary_data(blink.elf "main/mqtt_eclipseprojects_io.pem" TEXT)

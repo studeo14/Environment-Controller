@@ -6,35 +6,37 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-#include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
 #include "nvs_flash.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
 
-#include "freertos/portmacro.h"
-#include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
-#include "led_strip.h"
 #include "sdkconfig.h"
 
 #include <stdio.h>
 
+#include "mqtt_client.h"
+#include "esp_tls.h"
+#include "esp_ota_ops.h"
+#include <sys/param.h>
+
 #include "utils.h"
+#include "wifi/wifi.h"
+#include "led/led.h"
+#include "periphs/periphs.h"
+#include "periphs/sht31.h"
 
-static const char *TAG = "blinky!";
+static const char *TAG = "blinky";
+#define CONFIG_BROKER_URI "mqtts://9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
+#define CONFIG_BROKER_URI "mqtts://qtpy_1:cOFFc6aV1vXgdXmmMdQk@9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
+#define USERNAME "qtpy_1"
+#define PASSWORD "cOFFc6aV1vXgdXmmMdQk"
+extern const uint8_t mqtt_eclipseprojects_io_pem_start[]   asm("_binary_mqtt_eclipseprojects_io_pem_start");
+extern const uint8_t mqtt_eclipseprojects_io_pem_end[]   asm("_binary_mqtt_eclipseprojects_io_pem_end");
 
-/* Use project configuration menu (idf.py menuconfig) to choose the GPIO to
-   blink, or you can edit the following line and set a number here.
-*/
-#define BLINK_GPIO CONFIG_BLINK_GPIO
-#define BLINK_POWER CONFIG_BLINK_POWER
 #define I2C_MASTER_SCL_IO                                                      \
   CONFIG_I2C_MASTER_SCL /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO                                                      \
@@ -46,186 +48,7 @@ static const char *TAG = "blinky!";
 #define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_TIMEOUT_MS 1000
-/* The examples use WiFi configuration that you can set via project configuration menu
 
-   If you'd rather not, just change the below entries to strings with
-   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
-*/
-#define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
-
-#if CONFIG_ESP_WIFI_AUTH_OPEN
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_OPEN
-#elif CONFIG_ESP_WIFI_AUTH_WEP
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WEP
-#elif CONFIG_ESP_WIFI_AUTH_WPA_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA2_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA_WPA2_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_WPA2_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA3_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA3_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA2_WPA3_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_WPA3_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WAPI_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WAPI_PSK
-#endif
-
-static uint8_t s_led_state = 0;
-
-#ifdef CONFIG_BLINK_LED_RMT
-
-static led_strip_handle_t led_strip;
-
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-
-/* The event group allows multiple bits for each event, but we only care about two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-
-static int s_retry_num = 0;
-
-static void event_handler(void* arg, esp_event_base_t event_base,
-                                int32_t event_id, void* event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG,"connect to the AP fail");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-}
-
-void wifi_init_sta(void)
-{
-    s_wifi_event_group = xEventGroupCreate();
-
-    ESP_ERROR_CHECK(esp_netif_init());
-
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
-
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
-             * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-             * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-	     * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-             */
-            .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
-            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-        },
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start() );
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-}
-
-static void blink_led(void) {
-  /* If the addressable LED is enabled */
-  if (s_led_state) {
-    /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    led_strip_set_pixel(led_strip, 0, 0xFF, 0x0, 0x0);
-    /* Refresh the strip to send data */
-    led_strip_refresh(led_strip);
-  } else {
-    /* Set all LED off to clear all pixels */
-    led_strip_clear(led_strip);
-  }
-}
-
-static void configure_led(void) {
-  /* setup and turn on the power GPIO for the led_strip */
-  gpio_reset_pin(BLINK_POWER);
-  gpio_set_direction(BLINK_POWER, GPIO_MODE_OUTPUT);
-  gpio_set_level(BLINK_POWER, 1);
-  //
-  ESP_LOGI(TAG, "Example configured to blink addressable LED!");
-  /* LED strip initialization with the GPIO and pixels number*/
-  led_strip_config_t strip_config = {
-      .strip_gpio_num = BLINK_GPIO,
-      .max_leds = 1, // at least one LED on board
-  };
-  led_strip_rmt_config_t rmt_config = {
-      .resolution_hz = 10 * 1000 * 1000, // 10MHz
-  };
-  ESP_ERROR_CHECK(
-      led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
-  /* Set all LED off to clear all pixels */
-  led_strip_clear(led_strip);
-}
-
-#elif CONFIG_BLINK_LED_GPIO
-
-static void blink_led(void) {
-  /* Set the GPIO level according to the state (LOW or HIGH)*/
-  gpio_set_level(BLINK_GPIO, s_led_state);
-}
-
-static void configure_led(void) {
-  ESP_LOGI(TAG, "Example configured to blink GPIO LED!");
-  gpio_reset_pin(BLINK_GPIO);
-  /* Set the GPIO as a push/pull output */
-  gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-}
-
-#endif
 
 /**
  * @brief i2c master initialization
@@ -249,11 +72,79 @@ static esp_err_t i2c_master_init(void) {
                             I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
+esp_mqtt_client_handle_t my_client = NULL;
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, (int)event_id);
+    esp_mqtt_event_handle_t event = event_data;
+    esp_mqtt_client_handle_t client = event->client;
+    int msg_id;
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        // spawn periph task
+        esp_err_t ret = xTaskCreate(periphs_monitor_task, "Periphs", 2048, client, 5, NULL);
+        if (ret != pdPASS) {
+          ESP_LOGE(TAG, "Unable to initialize periph task: %d", ret);
+        }
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        break;
+    case MQTT_EVENT_SUBSCRIBED:
+        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_UNSUBSCRIBED:
+        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_PUBLISHED:
+        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+        break;
+    case MQTT_EVENT_ERROR:
+        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+            ESP_LOGI(TAG, "Last error code reported from esp-tls: 0x%x", event->error_handle->esp_tls_last_esp_err);
+            ESP_LOGI(TAG, "Last tls stack error number: 0x%x", event->error_handle->esp_tls_stack_err);
+            ESP_LOGI(TAG, "Last captured errno : %d (%s)",  event->error_handle->esp_transport_sock_errno,
+                     strerror(event->error_handle->esp_transport_sock_errno));
+        } else if (event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED) {
+            ESP_LOGI(TAG, "Connection refused error: 0x%x", event->error_handle->connect_return_code);
+        } else {
+            ESP_LOGW(TAG, "Unknown error type: 0x%x", event->error_handle->error_type);
+        }
+        break;
+    default:
+        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+        break;
+    }
+}
+
+static void mqtt_app_start(void)
+{
+    const esp_mqtt_client_config_t mqtt_cfg = {
+        .broker = {
+            .address.uri = CONFIG_BROKER_URI,
+            .verification.certificate = (const char *)mqtt_eclipseprojects_io_pem_start
+        }
+    };
+
+    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", (int)esp_get_free_heap_size());
+    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_start(client);
+}
+
 void app_main(void) {
 
   /* Configure the peripheral according to the LED type */
   configure_led();
   ESP_ERROR_CHECK(i2c_master_init());
+  sht31_set_port(I2C_MASTER_NUM);
 
   // do i2c scan
   ESP_LOGI(TAG, "i2c scan:");
@@ -281,19 +172,11 @@ void app_main(void) {
   ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
   wifi_init_sta();
 
-  while (1) {
-    for (long firstPixelHue = 0; firstPixelHue < 360; firstPixelHue++) {
-      int pixelHue = firstPixelHue;
-      hsv hue = {
-        .h = (double)pixelHue,
-        .s = 0.9,
-        .v = 0.5
-      };
-      rgb color = hsv2rgb(hue);
-      led_strip_set_pixel(led_strip, 0, color.r * 255.0, color.g * 255.0, color.b * 255.0);
-      /* Refresh the strip to send data */
-      led_strip_refresh(led_strip);
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
+  // spawn rainbow task
+  ret = xTaskCreate(rainbow_task, "Rainbow", 2048, NULL, 5, NULL);
+  if (ret != pdPASS) {
+    ESP_LOGE(TAG, "Unable to initialize rainbow task: %d", ret);
   }
+
+  mqtt_app_start();
 }
