@@ -30,7 +30,7 @@ void periphs_monitor_task(void * pvParameters) {
                 sprintf(payload, "%f|%f", temp, humidity);
                 esp_mqtt_client_publish(client, "/topic/monitor_data", payload, 0, 1, 0);
             }
-            if (temp >= 34.0) {
+            if (temp >= 32.0) {
                 pin_state = false;
             } else {
                 pin_state = true;
