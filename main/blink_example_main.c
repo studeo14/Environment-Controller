@@ -129,8 +129,7 @@ static void mqtt_app_start(void)
 {
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
-            .address.uri = CONFIG_BROKER_PROTO CONFIG_MQTT_USERNAME ":" CONFIG_MQTT_PASSWORD "@" CONFIG_BROKER_URI,
-            .verification.certificate = (const char *)mqtt_eclipseprojects_io_pem_start
+            .address.uri = CONFIG_BROKER_PROTO CONFIG_MQTT_USERNAME ":" CONFIG_MQTT_PASSWORD "@" CONFIG_BROKER_URI
         }
     };
 
