@@ -101,4 +101,22 @@ menu "BLINK Configuration"
         config ESP_WIFI_AUTH_WAPI_PSK
             bool "WAPI PSK"
     endchoice
+
+    config MQTT_URI
+        string "MQTT Broker URI"
+        default "9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
+        help
+            MQTT Broker URI to connect to.
+
+    config MQTT_USERNAME
+        string "MQTT Broker USERNAME"
+        default "username"
+        help
+            MQTT Broker username to connect with.
+
+    config MQTT_PASSWORD
+        string "MQTT Broker Password"
+        default "password"
+        help
+            MQTT Broker password to connect with.
 endmenu

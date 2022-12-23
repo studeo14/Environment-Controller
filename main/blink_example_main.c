@@ -30,10 +30,12 @@
 #include "periphs/sht31.h"
 
 static const char *TAG = "blinky";
-#define CONFIG_BROKER_URI "mqtts://9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
-#define CONFIG_BROKER_URI "mqtts://qtpy_1:cOFFc6aV1vXgdXmmMdQk@9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
-#define USERNAME "qtpy_1"
-#define PASSWORD "cOFFc6aV1vXgdXmmMdQk"
+#define CONFIG_BROKER_PROTO "mqtt://"
+#define CONFIG_BROKER_URI CONFIG_MQTT_URI
+// #define CONFIG_BROKER_URI "mqtts://9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
+// #define CONFIG_BROKER_URI "mqtts://qtpy_1:cOFFc6aV1vXgdXmmMdQk@9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
+#define USERNAME CONFIG_MQTT_USERNAME
+#define PASSWORD CONFIG_MQTT_PASSWORD
 extern const uint8_t mqtt_eclipseprojects_io_pem_start[]   asm("_binary_mqtt_eclipseprojects_io_pem_start");
 extern const uint8_t mqtt_eclipseprojects_io_pem_end[]   asm("_binary_mqtt_eclipseprojects_io_pem_end");
 
@@ -127,7 +129,7 @@ static void mqtt_app_start(void)
 {
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
-            .address.uri = CONFIG_BROKER_URI,
+            .address.uri = CONFIG_BROKER_PROTO CONFIG_MQTT_USERNAME ":" CONFIG_MQTT_PASSWORD "@" CONFIG_BROKER_URI,
             .verification.certificate = (const char *)mqtt_eclipseprojects_io_pem_start
         }
     };
