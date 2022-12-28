@@ -23,7 +23,7 @@ client.on_connect = on_connect
 client.on_message = on_message
 
 client.username_pw_set("scraper", "6uG2LDXMu6P9vep")
-client.connect("10.0.0.100", 1883, 60)
+client.connect("localhost", 1883, 60)
 
 # Blocking call that processes network traffic, dispatches callbacks and
 # handles reconnecting.
