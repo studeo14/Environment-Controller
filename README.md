@@ -1,13 +1,9 @@
 | Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-S2 | ESP32-S3 |
 | ----------------- | ----- | -------- | -------- | -------- | -------- |
 
-# Blink Example
+# Environmental Controller
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
-
-This example demonstrates how to blink a LED using GPIO or using the [led_strip](https://components.espressif.com/component/espressif/led_strip) component for the addressable LED, i.e. [WS2812](http://www.world-semi.com/Certifications/WS2812B.html).
-
-The `led_strip` is installed via [component manager](main/idf_component.yml).
+This is a project to monitor and control the temperature/humidity of an area using the SHT31, PCF8574, and MQTT as a live monitoring mechanism.
 
 ## How to Use Example
 
@@ -15,18 +11,24 @@ Before project configuration and build, be sure to set the correct chip target u
 
 ### Hardware Required
 
-* A development board with Espressif SoC (e.g., ESP32-DevKitC, ESP-WROVER-KIT, etc.)
-* A USB cable for Power supply and programming
+* QTPY ESP32-S2 (utilizes the build in NeoPixel)
+* SHT31 Stemma QT board
+* PCF8574 Stemma QT board
+* FeatherWing Power Relay (3V) board
 
-Some development boards use an addressable LED instead of a regular one. These development boards include:
+TODO Hardware
+* SSD1351 OLED Display for live display
+* PIXY2 Camera for live visuals
 
-| Board                | LED type             | Pin                  |
-| -------------------- | -------------------- | -------------------- |
-| ESP32-C3-DevKitC-1   | Addressable          | GPIO8                |
-| ESP32-C3-DevKitM-1   | Addressable          | GPIO8                |
-| ESP32-S2-DevKitM-1   | Addressable          | GPIO18               |
-| ESP32-S2-Saola-1     | Addressable          | GPIO18               |
-| ESP32-S3-DevKitC-1   | Addressable          | GPIO48               |
+## Pinout for Relay
+
+| PIN (PCF8574) | PIN (Relay) | Usage |
+| --- | ---- | __---- |
+| VCC | VCC | ... |
+| GND | GND | ... |
+| 1 | 1 | Pull down output to pull down signal pin for relay|
+
+Pull up the signal pin to VCC using a small reistor.
 
 See [Development Boards](https://www.espressif.com/en/products/devkits) for more information about it.
 
