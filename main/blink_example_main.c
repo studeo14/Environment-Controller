@@ -36,8 +36,6 @@ static const char *TAG = "blinky";
 // #define CONFIG_BROKER_URI "mqtts://qtpy_1:cOFFc6aV1vXgdXmmMdQk@9970dc81e52545be938804af4e58cc7a.s2.eu.hivemq.cloud:8883"
 #define USERNAME CONFIG_MQTT_USERNAME
 #define PASSWORD CONFIG_MQTT_PASSWORD
-extern const uint8_t mqtt_eclipseprojects_io_pem_start[]   asm("_binary_mqtt_eclipseprojects_io_pem_start");
-extern const uint8_t mqtt_eclipseprojects_io_pem_end[]   asm("_binary_mqtt_eclipseprojects_io_pem_end");
 
 #define I2C_MASTER_SCL_IO                                                      \
   CONFIG_I2C_MASTER_SCL /*!< GPIO number used for I2C master clock */
@@ -87,6 +85,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
         // spawn periph task
         esp_err_t ret = xTaskCreate(periphs_monitor_task, "Periphs", 2048, client, 5, NULL);
+        esp_mqtt_client_subscribe(client, "/topic/set_temp", 0);
+        esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, periphs_event_handler, NULL);
         if (ret != pdPASS) {
           ESP_LOGE(TAG, "Unable to initialize periph task: %d", ret);
         }
@@ -96,6 +96,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+        ESP_LOGI(TAG, "%s", event->data);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
