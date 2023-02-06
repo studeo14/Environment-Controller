@@ -4,6 +4,7 @@
 
 #include "esp_log.h"
 #include "driver/i2c.h"
+#include "i2cdev.h"
 #include <stdint.h>
 
 #define WRITE_BIT I2C_MASTER_WRITE            
@@ -13,6 +14,8 @@
 #define ACK_CHECK_DIS 0x0
 #define ACK_VAL 0x0
 #define NACK_VAL 0x1
+
+esp_err_t pcf_init(void);
 
 /**
  * Set pin to WB/R (false is output, true is input);

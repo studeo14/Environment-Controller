@@ -119,4 +119,10 @@ menu "BLINK Configuration"
         default "password"
         help
             MQTT Broker password to connect with.
+
+    config TOUCH_BUTTON
+        int "Touch button pin"
+        default 9
+        help
+            Touch button pin number
 endmenu
