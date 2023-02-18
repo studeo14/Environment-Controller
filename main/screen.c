@@ -59,6 +59,18 @@ static void screen_task(void *arg) {
     char temp_string[20];
     while (1) {
         if (on) {
+            // if temp update
+            uint32_t tmp;
+            if (xTaskNotifyWaitIndexed(1, 0x0, 0xFFFFFFFF, &tmp, 50) == pdTRUE) {
+                temp = *((float*)&tmp);
+                ESP_LOGI(TAG, "Got new temp: %f, %5.2f", temp, temp);
+                snprintf(temp_string, 8, "%5.2f C", temp);
+                ssd1306_printFixed16(0, 16, temp_string, STYLE_NORMAL);
+            } else {
+                ESP_LOGI(TAG, "Display old temp: %f, %5.2f", temp, temp);
+                snprintf(temp_string, 8, "%5.2f C", temp);
+                ssd1306_printFixed16(0, 16, temp_string, STYLE_NORMAL);
+            }
             if (xTaskNotifyWait(0x0, 0x3, &control, 0) == pdTRUE) {
                 // if another button press
                 if (control & 0x1) {
@@ -69,12 +81,6 @@ static void screen_task(void *arg) {
                     on = false;
                     ssd1306_clearScreen16();
                 }
-            }
-            // if temp update
-            if (xTaskNotifyWaitIndexed(1, 0x0, 0xFFFFFFFF,(uint32_t*) &temp, 50) == pdTRUE) {
-                ESP_LOGI(TAG, "Got new temp: %f, %5.2f", temp, temp);
-                snprintf(temp_string, 8, "%5.2f C", temp);
-                ssd1306_printFixed16(0, 16, temp_string, STYLE_NORMAL);
             }
         } else {
             // wait for button press

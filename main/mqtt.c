@@ -3,6 +3,8 @@
 #include "mqtt_client.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
+#include <stdint.h>
+#include <stdlib.h>
 
 #define CONFIG_BROKER_PROTO "mqtt://"
 #define CONFIG_BROKER_URI CONFIG_MQTT_URI
@@ -12,16 +14,25 @@
 esp_mqtt_client_handle_t my_client = NULL;
 static const char *TAG = "mqtt";
 
+esp_mqtt_client_handle_t mqtt_get_client() {
+    return my_client;
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, (int)event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
+    TaskHandle_t screen_task = (TaskHandle_t) handler_args;
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
         // spawn periph task
-        esp_err_t ret = xTaskCreate(periphs_monitor_task, "Periphs", 2048, client, 5, NULL);
+        PerifStructHandle_t params = malloc(sizeof(PerifStruct));
+        params->screen_task = screen_task;
+        params->mqtt_client = client;
+        esp_err_t ret = xTaskCreate(periphs_monitor_task, "Mon", 4096, params, 5, NULL);
+        //ret = xTaskCreate(periphs_monitor_task, "Periphs", 2048, client, 5, NULL);
         esp_mqtt_client_subscribe(client, "/topic/set_temp", 0);
         esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, periphs_event_handler, NULL);
         if (ret != pdPASS) {
@@ -63,7 +74,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-void mqtt_app_start(void)
+void mqtt_app_start(TaskHandle_t screen_task)
 {
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
@@ -74,6 +85,6 @@ void mqtt_app_start(void)
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", (int)esp_get_free_heap_size());
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, screen_task);
     esp_mqtt_client_start(client);
 }

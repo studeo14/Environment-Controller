@@ -108,14 +108,10 @@ void app_main(void) {
     ESP_LOGE(TAG, "Unable to initialize rainbow task: %d", ret);
   }
 
-  mqtt_app_start();
 
   // spawn screen task
   TaskHandle_t screen_task = screen_init(7, 5, 6);
-  // spawn perih task
-  ret = xTaskCreate(periphs_monitor_task_no_mqtt, "Mon", 4096, screen_task, 5, NULL);
-  if (ret != pdPASS) {
-    ESP_LOGE(TAG, "Unable to initialize mob task: %d", ret);
-  }
+  // spawn mqtt (once connected with spawn perih task)
+  mqtt_app_start(screen_task);
 
 }
