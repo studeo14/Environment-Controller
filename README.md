@@ -12,7 +12,7 @@ Before project configuration and build, be sure to set the correct chip target u
 ### Hardware Required
 
 * QTPY ESP32-S2 (utilizes the build in NeoPixel)
-* SHT31 Stemma QT board
+* MCP960x Thermocouple Stemma QT Board
 * PCF8574 Stemma QT board
 * FeatherWing Power Relay (3V) board
 
