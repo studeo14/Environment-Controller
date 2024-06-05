@@ -1,0 +1,18 @@
+
+services:
+  mqtt:
+    image: eclipse-mosquitto
+    ports:
+      - 1883:1883
+      - 9001:9001
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-logs:/mosquitto/log
+      - mqtt-passwd:/mosquitto/passwd
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./acl.conf:/mosquitto/config/acl.conf
+
+volumes:
+  mqtt-data:
+  mqtt-logs:
+  mqtt-passwd:

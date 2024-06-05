@@ -55,6 +55,10 @@ void periphs_monitor_task(void * pvParameters) {
     }
     bool pin_state = true;
     mcp960x_t temp_dev;
+    temp_dev.i2c_dev.cfg.clk_flags = 0;
+    temp_dev.i2c_dev.cfg.sda_pullup_en = 1;
+    temp_dev.i2c_dev.cfg.scl_pullup_en = 1;
+
     res = mcp960x_init_desc(&temp_dev, MCP960X_ADDR_DEFAULT, 0, 41, 40);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Error desc_init %s", esp_err_to_name(res));

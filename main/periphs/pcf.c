@@ -8,6 +8,9 @@ static i2c_port_t i2c_port = I2C_NUM_0;
 
 static i2c_dev_t pcf_dev;
 esp_err_t pcf_init(void) {
+    pcf_dev.cfg.clk_flags = 0;
+    pcf_dev.cfg.sda_pullup_en = 1;
+    pcf_dev.cfg.scl_pullup_en = 1;
     return pcf8574_init_desc(&pcf_dev, 0x20, 0, 41, 40);
 }
 
